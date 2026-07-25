@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wine Cellar</title>
+<style>
+  :root {
+    --bg: #f7f5f2;
+    --surface: #ffffff;
+    --border: #e4e0da;
+    --text: #2a2622;
+    --text-dim: #756f66;
+    --accent: #7b2d3e;
+    --red: #b3432f;
+    --orange: #c8792b;
+    --yellow: #b89a2b;
+    --green: #4c7a4a;
+    --gray: #8a857c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1a18;
+      --surface: #262320;
+      --border: #3a3630;
+      --text: #ede8e1;
+      --text-dim: #a39c90;
+      --accent: #d98ea0;
+      --red: #e08066;
+      --orange: #e0aa5f;
+      --yellow: #d9c25f;
+      --green: #82b57e;
+      --gray: #9a948a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 22px; font-weight: 650; margin: 0 0 2px; letter-spacing: -0.01em; }
+  .subtitle { color: var(--text-dim); font-size: 13px; margin: 0 0 22px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 22px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .stat .label { font-size: 11.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .stat .value { font-size: 21px; font-weight: 650; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+  input[type="search"] {
+    flex: 1; min-width: 180px; padding: 8px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px;
+  }
+  input[type="search"]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .chip {
+    padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-dim); font-size: 12.5px; cursor: pointer;
+    white-space: nowrap; user-select: none;
+  }
+  .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  thead th {
+    text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--text-dim); padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer;
+    white-space: nowrap;
+  }
+  thead th:hover { color: var(--text); }
+  thead th.sorted { color: var(--accent); }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+  .wine-name { font-weight: 600; }
+  .wine-sub { color: var(--text-dim); font-size: 12px; margin-top: 1px; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .badge {
+    display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+    color: #fff; white-space: nowrap;
+  }
+  .empty { text-align: center; color: var(--text-dim); padding: 40px 0; }
+  .footer-note { color: var(--text-dim); font-size: 11.5px; margin-top: 18px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Wine Cellar</h1>
+  <p class="subtitle" id="lastSync">Synced from InVintory via Notion</p>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="controls">
+    <input type="search" id="search" placeholder="Search wine or producer…">
+    <div id="urgencyChips" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+  </div>
+
+  <table id="table">
+    <thead>
+      <tr>
+        <th data-key="n">Wine</th>
+        <th data-key="v" class="num">Vintage</th>
+        <th data-key="q" class="num">Qty</th>
+        <th data-key="we">Drink Window</th>
+        <th data-key="u">Urgency</th>
+        <th data-key="val" class="num">Value / bt</th>
+        <th data-key="total" class="num">Total</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="empty" id="emptyMsg" style="display:none;">No wines match your filters.</div>
+
+  <p class="footer-note">Regenerated automatically each time wine_sync.py runs.</p>
+</div>
+
+<script>
+const RAW = [
+  {n:'Altesino Brunello di Montalcino',p:'Altesino',r:'Brunello di Montalcino, Tuscany',v:2015,q:1,ws:2023,we:2038,u:'Aging Well',val:70.99},
+  {n:'Aramenta Pinot Noir',p:'Aramenta',r:'Ribbon Ridge, Oregon',v:2010,q:1,ws:2014,we:2025,u:'Past Window',val:75},
+  {n:'Aramenta Pinot Noir',p:'Aramenta',r:'Ribbon Ridge, Oregon',v:2009,q:1,ws:2014,we:2024,u:'Past Window',val:75},
+  {n:'Aramenta Pinot Noir',p:'Aramenta',r:'Ribbon Ridge, Oregon',v:2011,q:1,ws:2014,we:2023,u:'Past Window',val:37.92},
+  {n:'Austin Hope Paso Robles Cabernet Sauvignon',p:'Austin Hope Winery',r:'Central Coast, California',v:2023,q:6,ws:2026,we:2032,u:'Aging Well',val:60.99},
+  {n:'Austin Hope Paso Robles Cabernet Sauvignon',p:'Austin Hope Winery',r:'Central Coast, California',v:2020,q:6,ws:2023,we:2029,u:'Approaching',val:75.81},
+  {n:'Austin Hope Paso Robles Cabernet Sauvignon',p:'Austin Hope Winery',r:'Central Coast, California',v:2021,q:1,ws:2023,we:2026,u:'Drink Now',val:56.67},
+  {n:'B Wise Nobles Vineyard Pinot Noir',p:'B. Wise Vineyards',r:'United States',v:2022,q:1,ws:2024,we:2030,u:'Aging Well',val:75},
+  {n:'B. Wise Moon Mountain District Zinfandel',p:'B. Wise Vineyards',r:'California',v:2022,q:2,ws:2025,we:2032,u:'Aging Well',val:58},
+  {n:'B. Wise Vineyards Moon Mountain District Cabernet Sauvignon',p:'B. Wise Vineyards',r:'Moon Mountain District, California',v:2022,q:2,ws:2026,we:2038,u:'Aging Well',val:85},
+  {n:'Banfi Poggio alle Mura Brunello di Montalcino',p:'',r:'',v:2008,q:1,ws:2017,we:2025,u:'Past Window',val:115},
+  {n:'Beringer Knights Valley Cabernet Sauvignon',p:'Beringer',r:'Knights Valley, California',v:2019,q:9,ws:2021,we:2027,u:'Drink Now',val:18.61},
+  {n:'Beringer Knights Valley Cabernet Sauvignon',p:'Beringer',r:'Knights Valley, California',v:2020,q:4,ws:2024,we:2030,u:'Aging Well',val:31.4},
+  {n:'Bollinger Special Cuvée Brut Champagne',p:'Champagne Bollinger S.A.',r:'Champagne',v:null,q:1,ws:2026,we:2029,u:'Approaching',val:67.7},
+  {n:'Bouchard Père & Fils Savigny-Lès-Beaune 1er Cru',p:'',r:'',v:2017,q:1,ws:2022,we:2045,u:'Aging Well',val:55},
+  {n:'Bouchard Père & Fils Savigny-Lès-Beaune 1er Cru-Les Lavières',p:'Bouchard Père & Fils',r:'Savigny-les-Beaune, Burgundy',v:2017,q:1,ws:2022,we:2035,u:'Aging Well',val:54.84},
+  {n:'Brotte Châteauneuf-du-Pape Les Hauts de Barville Rouge',p:'Brotte',r:'Chateauneuf-du-Pape, Rhone',v:2017,q:1,ws:2019,we:2027,u:'Drink Now',val:43.17},
+  {n:'Cain Cuvée NV13',p:'Cain Vineyard & Winery',r:'North Coast, California',v:null,q:5,ws:2026,we:2029,u:'Approaching',val:55.49},
+  {n:'Cain Vineyard & Winery Five Spring Mountain District',p:'',r:'',v:2006,q:2,ws:2012,we:2036,u:'Aging Well',val:120},
+  {n:'Cain Vineyard & Winery Five Spring Mountain District',p:'',r:'',v:2015,q:1,ws:2022,we:2046,u:'Aging Well',val:130},
+  {n:'Cain Vineyard & Winery Five Spring Mountain District Napa Valley',p:'Cain Vineyard & Winery',r:'Spring Mountain District, California',v:2015,q:1,ws:2017,we:2027,u:'Drink Now',val:150.31},
+  {n:'Cain Vineyard & Winery Five Spring Mountain District Napa Valley',p:'Cain Vineyard & Winery',r:'Spring Mountain District, California',v:2006,q:2,ws:2012,we:2021,u:'Past Window',val:188.98},
+  {n:'Calistoga Ranch Napa Valley Chardonnay',p:'Calistoga Ranch',r:'Napa Valley, California',v:2017,q:1,ws:2018,we:2024,u:'Past Window',val:95},
+  {n:'Carlisle Papa\'s Block Syrah',p:'Carlisle',r:'Russian River Valley, California',v:2023,q:1,ws:2026,we:2038,u:'Aging Well',val:56},
+  {n:'Carobbio Chianti Classico Riserva',p:'Carobbio',r:'Chianti Classico, Tuscany',v:2015,q:1,ws:2020,we:2029,u:'Approaching',val:38.57},
+  {n:'Castello Banfi Poggio Alle Mura Brunello Di Montalcino',p:'Castello Banfi',r:'Brunello di Montalcino, Tuscany',v:2008,q:1,ws:2017,we:2025,u:'Past Window',val:118.39},
+  {n:'Castello di Albola Chianti Classico Riserva',p:'Castello Di Albola',r:'Chianti Classico, Tuscany',v:2015,q:1,ws:2019,we:2032,u:'Aging Well',val:28},
+  {n:'Caymus Vineyards Napa Valley Cabernet Sauvignon',p:'Caymus Vineyards',r:'Napa Valley, California',v:2020,q:1,ws:2022,we:2033,u:'Aging Well',val:96.13},
+  {n:'Caymus Vineyards Napa Valley Cabernet Sauvignon',p:'Caymus Vineyards',r:'Napa Valley, California',v:2023,q:1,ws:2028,we:2038,u:'Aging Well',val:71.05},
+  {n:'Caymus Vineyards Napa Valley Cabernet Sauvignon',p:'Caymus Vineyards',r:'Napa Valley, California',v:2015,q:1,ws:2019,we:2038,u:'Aging Well',val:222.02},
+  {n:'Chalk Hill Estate Red Blend',p:'Chalk Hill',r:'Chalk Hill, California',v:2021,q:2,ws:2024,we:2032,u:'Aging Well',val:53.15},
+  {n:'Chanson Pinot Noir Le Bourgogne',p:'Chanson',r:'Bourgogne, Burgundy',v:2015,q:1,ws:2017,we:2025,u:'Past Window',val:30.38},
+  {n:'Chappellet Signature Cabernet Sauvignon',p:'Chappellet Winery',r:'Napa Valley, California',v:2020,q:3,ws:2026,we:2038,u:'Aging Well',val:196.42},
+  {n:'Chateau Belles-Cimes Saint-Émilion Rouge',p:'Chateau Belles-Cimes',r:'France',v:2003,q:1,ws:2008,we:2023,u:'Past Window',val:35},
+  {n:'Chateau Clarke Listrac-Medoc',p:'Baron Edmond de Rothschild',r:'Listrac-Medoc, Bordeaux',v:2015,q:2,ws:2021,we:2029,u:'Approaching',val:50.49},
+  {n:'Chateau de Pommard Les Riottes Monthelie Premier Cru',p:'Château de Pommard',r:'Monthelie, Burgundy',v:2013,q:1,ws:2017,we:2020,u:'Past Window',val:null},
+  {n:'Chateau du Levant',p:'Chateau du Levant',r:'Sauternes, Bordeaux',v:2011,q:1,ws:2016,we:2020,u:'Past Window',val:28},
+  {n:'Chateau Faugères Saint-Émilion Grand Cru Classé',p:'Château Faugères',r:'Saint-Emilion Grand Cru, Bordeaux',v:2015,q:3,ws:2020,we:2030,u:'Aging Well',val:55.75},
+  {n:'Chateau Montelena Chardonnay',p:'',r:'',v:2022,q:3,ws:2024,we:2030,u:'Aging Well',val:77},
+  {n:'Chateau Montelena Napa Valley Cabernet Sauvignon',p:'Chateau Montelena',r:'Napa Valley, California',v:2018,q:2,ws:2025,we:2040,u:'Aging Well',val:93.06},
+  {n:'Chateau Montelena Napa Valley Chardonnay',p:'Chateau Montelena',r:'Napa Valley, California',v:2022,q:3,ws:2024,we:2030,u:'Aging Well',val:73.78},
+  {n:'Château de Sales Pomerol',p:'Château de Sales',r:'Pomerol, Bordeaux',v:2020,q:1,ws:2027,we:2040,u:'Aging Well',val:36.98},
+  {n:'Château de Thauvenay Sancerre',p:'Château de Thauvenay',r:'Sancerre, Loire',v:2018,q:1,ws:2020,we:2022,u:'Past Window',val:28},
+  {n:'Château du Retout Haut-Médoc',p:'Château du Retout',r:'Haut-Medoc, Bordeaux',v:2018,q:1,ws:2024,we:2034,u:'Aging Well',val:23},
+  {n:'Château du Retout Haut-Médoc',p:'Château du Retout',r:'Haut-Medoc, Bordeaux',v:2015,q:1,ws:2024,we:2032,u:'Aging Well',val:61.35},
+  {n:'Château du Retout Haut-Médoc',p:'Château du Retout',r:'Haut-Medoc, Bordeaux',v:2016,q:1,ws:2023,we:2033,u:'Aging Well',val:31.55},
+  {n:'Château du Retout Haut-Médoc',p:'Château du Retout',r:'Haut-Medoc, Bordeaux',v:2020,q:2,ws:2027,we:2036,u:'Aging Well',val:24.74},
+  {n:'Château du Retout Haut-Médoc',p:'Château du Retout',r:'Haut-Medoc, Bordeaux',v:2019,q:1,ws:2026,we:2038,u:'Aging Well',val:27.36},
+  {n:'Château Giscours La Sirène de Giscours Margaux',p:'Château Giscours',r:'Margaux, Bordeaux',v:2019,q:2,ws:2025,we:2034,u:'Aging Well',val:40.05},
+  {n:'Château Giscours Margaux Grand Cru Classé',p:'Château Giscours',r:'Margaux, Bordeaux',v:2023,q:5,ws:2029,we:2045,u:'Aging Well',val:57.19},
+  {n:'Château Giscours Margaux Grand Cru Classé',p:'Château Giscours',r:'Margaux, Bordeaux',v:2010,q:1,ws:2017,we:2035,u:'Aging Well',val:111.24},
+  {n:'Château Giscours Margaux Grand Cru Classé',p:'Château Giscours',r:'Margaux, Bordeaux',v:2019,q:2,ws:2023,we:2045,u:'Aging Well',val:57.01},
+  {n:'Château Giscours Margaux Grand Cru Classé',p:'Château Giscours',r:'Margaux, Bordeaux',v:2020,q:10,ws:2028,we:2048,u:'Aging Well',val:64.16},
+  {n:'Château Giscours Margaux Grand Cru Classé',p:'Château Giscours',r:'Margaux, Bordeaux',v:2016,q:1,ws:2024,we:2045,u:'Aging Well',val:73},
+  {n:'Château Giscours Margaux Grand Cru Classé',p:'Château Giscours',r:'Margaux, Bordeaux',v:2021,q:2,ws:2028,we:2042,u:'Aging Well',val:56.86},
+  {n:'Château Giscours Margaux Grand Cru Classé',p:'Château Giscours',r:'Margaux, Bordeaux',v:2018,q:1,ws:2024,we:2045,u:'Aging Well',val:74.62},
+  {n:'Château Giscours Margaux Grand Cru Classé',p:'Château Giscours',r:'Margaux, Bordeaux',v:2015,q:4,ws:2025,we:2035,u:'Aging Well',val:77.37},
+  {n:'Château Godeau Ducarpe Saint-Émilion Grand Cru',p:'Château Godeau',r:'Saint-Emilion, Bordeaux',v:2015,q:1,ws:2019,we:2030,u:'Aging Well',val:24.89},
+  {n:'Château Grand Corbin Manuel Saint-Émilion Grand Cru',p:'Château Grand Corbin Manuel',r:'Saint-Emilion, Bordeaux',v:2015,q:1,ws:2023,we:2035,u:'Aging Well',val:33.9},
+  {n:'Château Haut-Bages Libéral La Chapelle de Haut-Bages Libéral Pauillac',p:'Château Haut-Bages Libéral',r:'France',v:2020,q:1,ws:2026,we:2038,u:'Aging Well',val:31.2},
+  {n:'Château Haut-Bages Libéral La Chapelle Pauillac',p:'',r:'',v:2020,q:1,ws:2026,we:2038,u:'Aging Well',val:35},
+  {n:'Château Haut-Bages Libéral Pauillac Grand Cru Classé',p:'Château Haut-Bages Libéral',r:'Pauillac, Bordeaux',v:2020,q:1,ws:2027,we:2041,u:'Aging Well',val:51.46},
+  {n:'Château Léoville Barton Saint-Julien',p:'Château Léoville Barton',r:'Saint-Julien, Bordeaux',v:2009,q:1,ws:2018,we:2045,u:'Aging Well',val:136.71},
+  {n:'Château Monbousquet Saint-Émilion Grand Cru',p:'Château Monbousquet',r:'Saint-Emilion Grand Cru, Bordeaux',v:2014,q:1,ws:2022,we:2032,u:'Aging Well',val:59.63},
+  {n:'Château Montrose La Dame de Montrose Saint-Estèphe',p:'Château Montrose',r:'Saint-Estephe, Bordeaux',v:2015,q:1,ws:2020,we:2035,u:'Aging Well',val:54.33},
+  {n:'Château Robin des Moines Saint-Émilion',p:'Château Robin des Moines',r:'France',v:2015,q:2,ws:2020,we:2024,u:'Past Window',val:17.84},
+  {n:'Château Roland La Garde Prestige Premières Côtes de Blaye',p:'',r:'',v:2001,q:1,ws:2008,we:2026,u:'Drink Now',val:20},
+  {n:'Château Roland La Garde Prestige Premières Côtes de Blaye Rouge',p:'Château Roland La Garde',r:'France',v:2001,q:1,ws:2008,we:2026,u:'Drink Now',val:20},
+  {n:'Cornerstone Cellars Napa Valley Cabernet Sauvignon',p:'Cornerstone Cellars',r:'Napa Valley, California',v:2018,q:2,ws:2024,we:2038,u:'Aging Well',val:99.99},
+  {n:'Cornerstone Cellars The Cornerstone Napa Valley Red',p:'Cornerstone Cellars',r:'North Coast, California',v:2019,q:2,ws:2024,we:2039,u:'Aging Well',val:101},
+  {n:'Cune (CVNE) Reserva Rioja',p:'Compañía Vinícola del Norte de España',r:'La Rioja',v:2015,q:1,ws:2020,we:2026,u:'Drink Now',val:27.69},
+  {n:'DAOU Seventeen Forty Reserve',p:'Daou',r:'Paso Robles, California',v:2021,q:1,ws:2023,we:2028,u:'Approaching',val:66.27},
+  {n:'Deutz Rosé Brut Champagne',p:'Deutz',r:'Champagne',v:null,q:3,ws:2022,we:2025,u:'Past Window',val:60.68},
+  {n:'Dom Pérignon Brut Champagne',p:'',r:'',v:2015,q:1,ws:2023,we:2043,u:'Aging Well',val:273},
+  {n:'Dom Pérignon Brut Champagne',p:'',r:'',v:2006,q:1,ws:2006,we:2033,u:'Aging Well',val:580},
+  {n:'Dom Pérignon Brut Champagne',p:'',r:'',v:2010,q:1,ws:2019,we:2035,u:'Aging Well',val:361},
+  {n:'Dom Pérignon Champagne',p:'Dom Pérignon',r:'Champagne',v:2015,q:1,ws:2023,we:2043,u:'Aging Well',val:199.25},
+  {n:'Dom Pérignon Champagne',p:'Dom Pérignon',r:'Champagne',v:2010,q:1,ws:2019,we:2035,u:'Aging Well',val:220.32},
+  {n:'Dom Pérignon Champagne',p:'Dom Pérignon',r:'Champagne',v:2006,q:1,ws:2006,we:2033,u:'Aging Well',val:231.28},
+  {n:'Domaine Bouchard Père & Fils Beaune du Château Premier Cru',p:'Bouchard Père & Fils',r:'Beaune, Burgundy',v:2015,q:1,ws:2021,we:2030,u:'Aging Well',val:44.68},
+  {n:'Domaine de Bellène Vieilles Vignes Nuits-Saint-Georges',p:'Domaine Bellene',r:'Nuits-Saint-Georges, Burgundy',v:2020,q:3,ws:2028,we:2032,u:'Aging Well',val:73.1},
+  {n:'Domaine de Courcel Pommard Premier Cru \'Les Fremiers\'',p:'Domaine de Courcel',r:'Pommard, Burgundy',v:2015,q:1,ws:2025,we:2040,u:'Aging Well',val:119.5},
+  {n:'Domaine des Riottes Savigny-lès-Beaune 1er Cru Les Lavières',p:'Domaine des Riottes',r:'Savigny-les-Beaune, Burgundy',v:2018,q:2,ws:2025,we:2033,u:'Aging Well',val:54.99},
+  {n:'Domaine du Grand Tinel Châteauneuf-du-Pape',p:'Domaine du Grand Tinel',r:'Chateauneuf-du-Pape, Rhone',v:2015,q:1,ws:2020,we:2027,u:'Drink Now',val:44.93},
+  {n:'Domaine l\'Abbé Dîne Côtes-du-Rhône',p:'Domaine l\'Abbé Dîne',r:'Cotes du Rhone, Rhone',v:2021,q:1,ws:2024,we:2028,u:'Approaching',val:11.54},
+  {n:'Domaine Machard de Gramont Pommard 1er Cru \'Clos Blanc\'',p:'Domaine Bertrand et Axelle Machard de Gramont',r:'Pommard, Burgundy',v:2020,q:1,ws:2025,we:2029,u:'Approaching',val:79.99},
+  {n:'Domaine Serene Evenstad Reserve Pinot Noir',p:'Domaine Serene',r:'Willamette Valley, Oregon',v:2015,q:3,ws:2020,we:2026,u:'Drink Now',val:215.41},
+  {n:'Domaine Serene Evenstad Reserve Pinot Noir',p:'Domaine Serene',r:'Willamette Valley, Oregon',v:2014,q:1,ws:2018,we:2023,u:'Past Window',val:103.7},
+  {n:'Domaine Serene Jerusalem Hill Vineyard Pinot Noir',p:'Domaine Serene',r:'Eola-Amity Hills, Oregon',v:2011,q:1,ws:2017,we:2025,u:'Past Window',val:105.28},
+  {n:'Domaine Serene Yamhill Cuvée Pinot Noir',p:'Domaine Serene',r:'Willamette Valley, Oregon',v:2011,q:1,ws:2014,we:2019,u:'Past Window',val:92.11},
+  {n:'Domaine Serene Yamhill Cuvée Pinot Noir',p:'Domaine Serene',r:'Willamette Valley, Oregon',v:2019,q:1,ws:2023,we:2027,u:'Drink Now',val:61.98},
+  {n:'Domaine Serene Yamhill Cuvée Pinot Noir',p:'Domaine Serene',r:'Willamette Valley, Oregon',v:2022,q:2,ws:2024,we:2030,u:'Aging Well',val:56.44},
+  {n:'Egrot Et Filles Champagne Extra Brut',p:'Egrot Et Filles',r:'Champagne',v:2011,q:1,ws:2018,we:2026,u:'Drink Now',val:65},
+  {n:'Etude Carneros Estate Pinot Noir',p:'Etude',r:'Napa Valley, California',v:2020,q:12,ws:2027,we:2033,u:'Aging Well',val:24.71},
+  {n:'Frog\'s Leap Estate Grown Cabernet Sauvignon',p:'Frog’s Leap Winery',r:'Rutherford, California',v:2010,q:1,ws:2017,we:2028,u:'Approaching',val:54.99},
+  {n:'Granville Holstein Vineyard Pinot Noir',p:'Granville Wine Co.',r:'Dundee Hills, Oregon',v:2014,q:1,ws:2018,we:2024,u:'Past Window',val:55},
+  {n:'Granville Holstein Vineyard Pinot Noir',p:'Granville Wine Co.',r:'Dundee Hills, Oregon',v:2015,q:1,ws:2019,we:2027,u:'Drink Now',val:55},
+  {n:'Hall Napa Valley Cabernet Sauvignon',p:'Hall',r:'Napa Valley, California',v:2020,q:4,ws:2024,we:2032,u:'Aging Well',val:60.91},
+  {n:'Hall Napa Valley Cabernet Sauvignon',p:'Hall',r:'Napa Valley, California',v:2021,q:5,ws:2026,we:2040,u:'Aging Well',val:95.33},
+  {n:'Haut-Médoc Giscours',p:'Château Giscours',r:'Haut-Medoc, Bordeaux',v:2019,q:1,ws:2023,we:2032,u:'Aging Well',val:30.6},
+  {n:'Henri Louis Fagard Chateau De Cornemps Bordeaux Supérieur',p:'Henri Louis Fagard',r:'Bordeaux Superieur, Bordeaux',v:2020,q:1,ws:2025,we:2032,u:'Aging Well',val:18},
+  {n:'Keenan Capstone',p:'Keenan',r:'United States',v:2020,q:3,ws:2025,we:2035,u:'Aging Well',val:80.68},
+  {n:'Kirkland Signature Châteauneuf-du-Pape',p:'Kirkland',r:'Chateauneuf-du-Pape, Rhone',v:2022,q:1,ws:2024,we:2030,u:'Aging Well',val:23.45},
+  {n:'Kirkland Signature Châteauneuf-du-Pape Cuvée de Nalys',p:'Kirkland',r:'Chateauneuf-du-Pape, Rhone',v:2019,q:1,ws:2023,we:2033,u:'Aging Well',val:20},
+  {n:'Kirkland Signature Châteauneuf-du-Pape Cuvée de Nalys',p:'Kirkland',r:'Chateauneuf-du-Pape, Rhone',v:2020,q:1,ws:2024,we:2030,u:'Aging Well',val:20},
+  {n:'La Massa Toscana',p:'La Massa',r:'Toscana, Tuscany',v:2021,q:1,ws:2023,we:2027,u:'Drink Now',val:31.61},
+  {n:'La Rasina Brunello di Montalcino',p:'La Rasina',r:'Brunello di Montalcino, Tuscany',v:2019,q:1,ws:2029,we:2044,u:'Aging Well',val:58.86},
+  {n:'La Rasina Brunello di Montalcino',p:'La Rasina',r:'Brunello di Montalcino, Tuscany',v:2016,q:2,ws:2022,we:2033,u:'Aging Well',val:79.9},
+  {n:'Louis Roederer Vintage Rosé Brut Champagne',p:'Louis Roederer',r:'Champagne',v:2009,q:1,ws:2017,we:2030,u:'Aging Well',val:91.7},
+  {n:'Maison l\'Envoye The Attaché Pinot Noir',p:'Maison l\'Envoye',r:'Willamette Valley, Oregon',v:2014,q:1,ws:2018,we:2022,u:'Past Window',val:40.02},
+  {n:'Mark Ryan Winery Long Haul Red Mountain Red',p:'Mark Ryan Winery',r:'Yakima Valley, Washington',v:null,q:1,ws:2022,we:2025,u:'Past Window',val:63.35},
+  {n:'Medlock Ames Bell Mountain Cabernet Sauvignon Special Select',p:'Medlock Ames',r:'Sonoma County, California',v:2023,q:3,ws:2029,we:2043,u:'Aging Well',val:65},
+  {n:'Michel Foch Champagne Blanc de Blancs',p:'Michel Foch',r:'Montagne de Reims, Champagne',v:2015,q:2,ws:2019,we:2027,u:'Drink Now',val:60},
+  {n:'Michel Foch Champagne Brut',p:'Michel Foch',r:'Champagne',v:null,q:4,ws:2025,we:2028,u:'Approaching',val:55},
+  {n:'Monticello Oak Knoll District Cabernet Sauvignon',p:'Monticello Vineyards',r:'Napa Valley, California',v:2020,q:4,ws:2025,we:2035,u:'Aging Well',val:33.2},
+  {n:'Moone-Tsai Hillside Blend',p:'Moone-Tsai Vineyards',r:'Howell Mountain, California',v:2015,q:1,ws:2024,we:2038,u:'Aging Well',val:129.73},
+  {n:'Mount Eden Vineyards Domaine Eden Cabernet Sauvignon',p:'Mount Eden Vineyards',r:'Santa Cruz Mountains, California',v:2020,q:6,ws:2025,we:2034,u:'Aging Well',val:60.13},
+  {n:'Negretti Barolo',p:'Negretti',r:'Barolo, Piedmont',v:2017,q:1,ws:2023,we:2029,u:'Approaching',val:52.61},
+  {n:'Nickel & Nickel Branding Iron Cabernet Sauvignon',p:'Nickel & Nickel Winery',r:'Oakville, California',v:2017,q:1,ws:2022,we:2028,u:'Approaching',val:118.38},
+  {n:'Patricia Green Cellars Volcanic Pinot Noir',p:'Patricia Green Cellars',r:'Dundee Hills, Oregon',v:2021,q:1,ws:2024,we:2033,u:'Aging Well',val:53.36},
+  {n:'Paul Junet Grand Mirande Berthonneau Saint-Émilion Grand Cru',p:'Paul Junet',r:'Saint-Emilion, Bordeaux',v:2023,q:6,ws:2027,we:2038,u:'Aging Well',val:55},
+  {n:'Pietro Beconcini Reciso Sangiovese',p:'Pietro Beconcini',r:'Toscana, Tuscany',v:2015,q:1,ws:2019,we:2028,u:'Approaching',val:35},
+  {n:'Porte Rouge Châteauneuf-du-Pape',p:'Porte Rouge',r:'Chateauneuf-du-Pape, Rhone',v:2020,q:3,ws:2025,we:2038,u:'Aging Well',val:52.96},
+  {n:'Prunotto Barolo',p:'Prunotto',r:'Barolo, Piedmont',v:2016,q:1,ws:2022,we:2034,u:'Aging Well',val:59.47},
+  {n:'Quilt Cabernet Sauvignon',p:'Quilt',r:'Napa Valley, California',v:2020,q:1,ws:2023,we:2028,u:'Approaching',val:48.79},
+  {n:'Ragtag Wine Co. Paso Robles Meritage',p:'Ragtag Wine Co.',r:'California',v:2019,q:1,ws:2022,we:2031,u:'Aging Well',val:32},
+  {n:'Renieri Brunello di Montalcino',p:'Renieri',r:'Brunello di Montalcino, Tuscany',v:2015,q:1,ws:2023,we:2036,u:'Aging Well',val:99.84},
+  {n:'Ridge East Bench Zinfandel',p:'Ridge Vineyards',r:'Dry Creek Valley, California',v:2020,q:1,ws:2023,we:2029,u:'Approaching',val:50.84},
+  {n:'Ridge Geyserville',p:'Ridge Vineyards',r:'Alexander Valley, California',v:2021,q:1,ws:2024,we:2033,u:'Aging Well',val:51.07},
+  {n:'Ridge Geyserville',p:'Ridge Vineyards',r:'Alexander Valley, California',v:2020,q:1,ws:2023,we:2031,u:'Aging Well',val:51.28},
+  {n:'Ridge Lytton Estate Primitivo',p:'Ridge Vineyards',r:'Dry Creek Valley, California',v:2016,q:1,ws:2019,we:2024,u:'Past Window',val:50},
+  {n:'Ridge Lytton Estate Syrah',p:'Ridge Vineyards',r:'Dry Creek Valley, California',v:2016,q:1,ws:2021,we:2029,u:'Approaching',val:59.99},
+  {n:'Ridolfi \'Donna Rebecca\' Brunello di Montalcino',p:'Agricola Ridolfi',r:'Brunello di Montalcino, Tuscany',v:2014,q:1,ws:2021,we:2031,u:'Aging Well',val:133.03},
+  {n:'Siduri Pratt Vineyard Sexton Road Pinot Noir',p:'Siduri',r:'Sonoma Coast, California',v:2016,q:3,ws:2020,we:2026,u:'Drink Now',val:50},
+  {n:'Siduri Yamhill-Carlton Pinot Noir',p:'Siduri',r:'Yamhill-Carlton, Oregon',v:2016,q:1,ws:2018,we:2026,u:'Drink Now',val:51.91},
+  {n:'Siduri Zena Crown Vineyard Pinot Noir',p:'Siduri',r:'Eola-Amity Hills, Oregon',v:2016,q:2,ws:2020,we:2025,u:'Past Window',val:52},
+  {n:'Silver Oak Napa Valley Cabernet Sauvignon',p:'Silver Oak',r:'Napa Valley, California',v:2007,q:1,ws:2007,we:2036,u:'Aging Well',val:185.94},
+  {n:'Silver Oak Napa Valley Cabernet Sauvignon',p:'Silver Oak',r:'Napa Valley, California',v:2003,q:1,ws:2023,we:2027,u:'Drink Now',val:146.95},
+  {n:'Silver Oak Napa Valley Cabernet Sauvignon',p:'Silver Oak',r:'Napa Valley, California',v:2015,q:1,ws:2015,we:2045,u:'Aging Well',val:177.13},
+  {n:'Silver Oak Napa Valley Cabernet Sauvignon',p:'Silver Oak',r:'Napa Valley, California',v:2016,q:1,ws:2016,we:2040,u:'Aging Well',val:184.99},
+  {n:'Silverado Estate Grown Cabernet Sauvignon',p:'Silverado Vineyards',r:'Napa Valley, California',v:2018,q:1,ws:2024,we:2035,u:'Aging Well',val:119.99},
+  {n:'Sojourn Pinot Noir',p:'Sojourn Cellars',r:'Sonoma Coast, California',v:2021,q:2,ws:2024,we:2030,u:'Aging Well',val:70.49},
+  {n:'Spring Mountain Vineyard Elivette',p:'Spring Mountain Vineyard',r:'Napa Valley, California',v:2014,q:2,ws:2020,we:2033,u:'Aging Well',val:179.66},
+  {n:'Spring Mountain Vineyard Elivette',p:'Spring Mountain Vineyard',r:'Napa Valley, California',v:2000,q:1,ws:2006,we:2016,u:'Past Window',val:192.75},
+  {n:'Spring Mountain Vineyard Elivette',p:'Spring Mountain Vineyard',r:'Napa Valley, California',v:2006,q:2,ws:2013,we:2021,u:'Past Window',val:340.61},
+  {n:'Spring Mountain Vineyard Elivette',p:'Spring Mountain Vineyard',r:'Napa Valley, California',v:2007,q:2,ws:2013,we:2022,u:'Past Window',val:147},
+  {n:'Stags\' Leap Petite Sirah',p:'Stags\' Leap Winery',r:'Napa Valley, California',v:2020,q:2,ws:2025,we:2038,u:'Aging Well',val:38.94},
+  {n:'Tenacci Piccolomini D\'Aragona Vigna Di Pianrosso Brunello Di Montalcino',p:'Tenacci Piccolomini D\'Aragona',r:'Brunello di Montalcino, Tuscany',v:2013,q:1,ws:2021,we:2033,u:'Aging Well',val:110.01},
+  {n:'Tenacci Piccolomini D\'Aragona Vigna Di Pianrosso Brunello',p:'',r:'',v:2013,q:1,ws:2021,we:2033,u:'Aging Well',val:80},
+  {n:'Tenuta dell\'Ornellaia Le Volte Toscana Rosso',p:'Ornellaia',r:'Toscana, Tuscany',v:2020,q:2,ws:2023,we:2035,u:'Aging Well',val:29.56},
+  {n:'Tenuta di Nozzole Chianti Classico',p:'Tenuta di Nozzole',r:'Chianti Classico, Tuscany',v:2015,q:1,ws:2021,we:2026,u:'Drink Now',val:43.44},
+  {n:'The Prisoner Red Blend',p:'The Prisoner Wine Company',r:'Napa Valley, California',v:2022,q:1,ws:2023,we:2030,u:'Aging Well',val:83.38},
+  {n:'Theorize Napa Valley Cabernet Sauvignon',p:'Theorize',r:'California',v:2023,q:2,ws:2028,we:2043,u:'Aging Well',val:43},
+  {n:'Tori Magna Theron Cask No. 51 Proprietary Red',p:'Tori Magna Wines',r:'Napa Valley, California',v:2023,q:5,ws:2029,we:2043,u:'Aging Well',val:115},
+  {n:'Utopia Paradise Estate Reserve Pinot Noir',p:'Utopia',r:'Ribbon Ridge, Oregon',v:2013,q:1,ws:2019,we:2028,u:'Approaching',val:70},
+  {n:'Vincent Girardin Les Vieilles Vignes Puligny-Montrachet',p:'Domain Vincent Girardin',r:'Puligny-Montrachet, Burgundy',v:2019,q:1,ws:2022,we:2030,u:'Aging Well',val:93.24},
+  {n:'Viticcio Chianti Classico Riserva',p:'Fattoria Viticcio SARL',r:'Chianti Classico, Tuscany',v:2015,q:4,ws:2022,we:2043,u:'Aging Well',val:30.69},
+  {n:'Walt Blue Jay Pinot Noir',p:'Walt',r:'Anderson Valley, California',v:2023,q:2,ws:2025,we:2031,u:'Aging Well',val:42.38},
+  {n:'Walt Wines Sonoma Coast Chardonnay',p:'WALT Wines',r:'Sonoma Coast, California',v:2023,q:1,ws:2024,we:2027,u:'Drink Now',val:30.99}
+];
+
+const URGENCY_COLOR = {
+  'Past Window': 'var(--red)',
+  'Drink Now': 'var(--orange)',
+  'Approaching': 'var(--yellow)',
+  'Aging Well': 'var(--green)',
+  'Unknown': 'var(--gray)',
+};
+
+const fmtUSD = (n) => n == null ? '—' : new Intl.NumberFormat('en-US', {style:'currency', currency:'USD', maximumFractionDigits: 0}).format(n);
+const fmtWindow = (ws, we) => {
+  if (ws == null && we == null) return '—';
+  if (ws == null) return `≤ ${we}`;
+  if (we == null) return `${ws} →`;
+  return `${ws}–${we}`;
+};
+
+let sortKey = 'n';
+let sortDir = 1;
+let activeUrgency = null;
+
+function computeStats(rows) {
+  const totalBottles = rows.reduce((s, r) => s + r.q, 0);
+  const totalValue = rows.reduce((s, r) => s + (r.val != null ? r.val * r.q : 0), 0);
+  const counts = {};
+  rows.forEach(r => counts[r.u] = (counts[r.u] || 0) + 1);
+  return { totalBottles, totalValue, counts, wines: rows.length };
+}
+
+function renderStats() {
+  const s = computeStats(RAW);
+  const el = document.getElementById('stats');
+  el.innerHTML = `
+    <div class="stat"><div class="label">Distinct Wines</div><div class="value">${s.wines}</div></div>
+    <div class="stat"><div class="label">Total Bottles</div><div class="value">${s.totalBottles}</div></div>
+    <div class="stat"><div class="label">Est. Total Value</div><div class="value">${fmtUSD(s.totalValue)}</div></div>
+    <div class="stat"><div class="label">Drink Now</div><div class="value" style="color:${URGENCY_COLOR['Drink Now']}">${s.counts['Drink Now'] || 0}</div></div>
+    <div class="stat"><div class="label">Past Window</div><div class="value" style="color:${URGENCY_COLOR['Past Window']}">${s.counts['Past Window'] || 0}</div></div>
+  `;
+}
+
+function renderChips() {
+  const order = ['Drink Now', 'Approaching', 'Aging Well', 'Past Window', 'Unknown'];
+  const el = document.getElementById('urgencyChips');
+  el.innerHTML = order.map(u =>
+    `<div class="chip" data-u="${u}">${u}</div>`
+  ).join('');
+  el.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const u = chip.dataset.u;
+      activeUrgency = activeUrgency === u ? null : u;
+      render();
+    });
+  });
+}
+
+function render() {
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  let rows = RAW.filter(r => {
+    const matchesSearch = !q || r.n.toLowerCase().includes(q) || (r.p || '').toLowerCase().includes(q) || (r.r || '').toLowerCase().includes(q);
+    const matchesUrgency = !activeUrgency || r.u === activeUrgency;
+    return matchesSearch && matchesUrgency;
+  });
+
+  rows = rows.map(r => ({...r, total: r.val != null ? r.val * r.q : null}));
+  rows.sort((a, b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (typeof av === 'string') return av.localeCompare(bv) * sortDir;
+    return (av - bv) * sortDir;
+  });
+
+  document.querySelectorAll('#urgencyChips .chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.u === activeUrgency);
+  });
+  document.querySelectorAll('thead th').forEach(th => {
+    th.classList.toggle('sorted', th.dataset.key === sortKey);
+  });
+
+  const tbody = document.getElementById('rows');
+  document.getElementById('emptyMsg').style.display = rows.length ? 'none' : 'block';
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>
+        <div class="wine-name">${escapeHtml(r.n)}</div>
+        <div class="wine-sub">${escapeHtml([r.p, r.r].filter(Boolean).join(' · '))}</div>
+      </td>
+      <td class="num">${r.v != null ? r.v : 'N.V.'}</td>
+      <td class="num">${r.q}</td>
+      <td>${fmtWindow(r.ws, r.we)}</td>
+      <td><span class="badge" style="background:${URGENCY_COLOR[r.u] || 'var(--gray)'}">${r.u}</span></td>
+      <td class="num">${fmtUSD(r.val)}</td>
+      <td class="num">${fmtUSD(r.total)}</td>
+    </tr>
+  `).join('');
+}
+
+function escapeHtml(s) {
+  return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.querySelectorAll('thead th').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if (sortKey === key) { sortDir *= -1; } else { sortKey = key; sortDir = 1; }
+    render();
+  });
+});
+document.getElementById('search').addEventListener('input', render);
+
+renderStats();
+renderChips();
+render();
+</script>
+</body>
+</html>
